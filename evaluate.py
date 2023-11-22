@@ -1,17 +1,12 @@
 from dataclasses import dataclass
 from torchvision import transforms
-from diffusers import UNet2DModel
 import torch
-from PIL import Image
 from diffusers import DDPMScheduler, DDPMPipeline
 import sys
-from accelerate import notebook_launcher
-import glob
 from torch.utils.data import DataLoader
-from diffusers.optimization import get_cosine_schedule_with_warmup
 import matplotlib.pyplot as plt
-from trainer import train_loop
 from butterfly_dataset import ButterflyDSDataset
+import argparse
 
 def Upsample(y, scale):
     y = y.repeat_interleave(scale, dim=2)
@@ -158,23 +153,37 @@ class TrainingConfig:
     overwrite_output_dir = True  # overwrite the old model when re-running the notebook
     seed = 0
 
+def main(args):
+    config = TrainingConfig()
 
-config = TrainingConfig()
+    transform = transforms.Normalize(3 * [0.5], 3 * [0.5])
 
-transform = transforms.Normalize(3 * [0.5], 3 * [0.5])
+    train_data = ButterflyDSDataset('train-00000-of-00001.parquet', transform=transform, im_size=config.image_size,
+                                    donwsample_scale=8)
+    train_loader = DataLoader(train_data, batch_size=config.train_batch_size, shuffle=True, num_workers=num_workers)
 
-train_data = ButterflyDSDataset('train-00000-of-00001.parquet', transform=transform, im_size=config.image_size, donwsample_scale=8)
-train_loader = DataLoader(train_data, batch_size=config.train_batch_size, shuffle=True, num_workers=num_workers)
+    test_data = ButterflyDSDataset('train-00000-of-00001.parquet', transform=transform, im_size=config.image_size,
+                                   donwsample_scale=8)
+    test_loader = DataLoader(test_data, batch_size=config.eval_batch_size, shuffle=False, num_workers=num_workers)
 
-test_data = ButterflyDSDataset('train-00000-of-00001.parquet', transform=transform, im_size=config.image_size, donwsample_scale=8)
-test_loader = DataLoader(test_data, batch_size=config.eval_batch_size, shuffle=False, num_workers=num_workers)
+    pipeline = DDPMPipeline.from_pretrained(args.ckpt)
+    pipeline.to('cuda')
 
+    model = pipeline.unet
+    noise_scheduler = pipeline.scheduler
 
-pipeline = DDPMPipeline.from_pretrained('wandb/run-20231119_154332-m1djegwy/files')
-pipeline.to('cuda')
+    if args.method == 'default':
+        evaluate(model, noise_scheduler, test_loader)
+    elif args.method == 'ddnm':
+        evaluate_ddnm(model, noise_scheduler, test_loader)
 
-model = pipeline.unet
-noise_scheduler = pipeline.scheduler
+# parse arguments
+parser = argparse.ArgumentParser(description='Conditional Image Super-Resolution')
+parser.add_argument('--method', type=str, required=True, choices=['default', 'ddnm'])
+parser.add_argument('--ckpt', type=str, default='wandb/run-20231119_154332-m1djegwy/files', help='Path to the pretrained model (just point to the files dir in wandb)')
 
-evaluate(model, noise_scheduler, test_loader)
+args = parser.parse_args()
+
+if __name__ == "__main__":
+    main(args)
 
