@@ -10,7 +10,7 @@ import glob
 from torch.utils.data import DataLoader
 from diffusers.optimization import get_cosine_schedule_with_warmup
 import matplotlib.pyplot as plt
-from trainer import train_loop
+from trainer_with_knowledge import train_loop
 from butterfly_dataset import ButterflyDSDataset
 
 gettrace = getattr(sys, 'gettrace', None)
