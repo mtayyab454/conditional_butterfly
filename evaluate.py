@@ -7,6 +7,8 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 from butterfly_dataset import ButterflyDSDataset
 import argparse
+import torch.nn.functional as F
+import os
 
 def Upsample(y, scale):
     y = y.repeat_interleave(scale, dim=2)
@@ -62,28 +64,28 @@ def gen_images_ddnm(model, scheduler, y, y_):
 
     return input
 
-def evaluate_ddnm(model, scheduler, test_loader):
-    model.eval()
-
-    loader_iter = iter(test_loader)
-    # loop for first 4 images
-    for i in range(len(test_loader)):
-
-        print(i, len(test_loader))
-        batch = next(loader_iter)
-        x, y = batch
-        x = x.to("cuda")
-        y = y.to("cuda")
-        y_ = A(x).to("cuda")
-        x_hat = gen_images_ddnm(model, scheduler, y, y_)
-
-        image = (x_hat / 2 + 0.5).clamp(0, 1)
-        image = image.detach().cpu().permute(0, 2, 3, 1)
-
-        gt_image = (x / 2 + 0.5).clamp(0, 1)
-        gt_image = gt_image.detach().cpu().permute(0, 2, 3, 1)
-
-        log_images(gt_image, image, fname='results/ddnm/batch'+str(i)+'.png')
+# def evaluate_ddnm(model, scheduler, test_loader):
+#     model.eval()
+#
+#     loader_iter = iter(test_loader)
+#     # loop for first 4 images
+#     for i in range(len(test_loader)):
+#
+#         print(i, len(test_loader))
+#         batch = next(loader_iter)
+#         x, y = batch
+#         x = x.to("cuda")
+#         y = y.to("cuda")
+#         y_ = A(x).to("cuda")
+#         x_hat = gen_images_ddnm(model, scheduler, y, y_)
+#
+#         image = (x_hat / 2 + 0.5).clamp(0, 1)
+#         image = image.detach().cpu().permute(0, 2, 3, 1)
+#
+#         gt_image = (x / 2 + 0.5).clamp(0, 1)
+#         gt_image = gt_image.detach().cpu().permute(0, 2, 3, 1)
+#
+#         log_images(gt_image, image, fname='results/ddnm/batch'+str(i)+'.png')
 
 def log_images(gt_images, pd_images, fname=None):
 
@@ -104,10 +106,33 @@ def log_images(gt_images, pd_images, fname=None):
         ax.axis('off')
     plt.savefig(fname)
 
-def evaluate(model, scheduler, test_loader):
+# def evaluate(model, scheduler, test_loader):
+#     model.eval()
+#
+#     # loop for first 4 images
+#     loader_iter = iter(test_loader)
+#     for i in range(len(test_loader)):
+#         print(i, len(test_loader))
+#         batch = next(loader_iter)
+#         x, y = batch
+#         x = x.to("cuda")
+#         y = y.to("cuda")
+#         x_hat = gen_images(model, scheduler, y)
+#
+#         image = (x_hat / 2 + 0.5).clamp(0, 1)
+#         image = image.detach().cpu().permute(0, 2, 3, 1)
+#
+#         gt_image = (x / 2 + 0.5).clamp(0, 1)
+#         gt_image = gt_image.detach().cpu().permute(0, 2, 3, 1)
+#
+#         log_images(gt_image, image, fname='results/default/batch'+str(i)+'.png')
+
+def evaluate(model, scheduler, test_loader, output_dir):
+    os.makedirs(output_dir, exist_ok=True)
     model.eval()
 
     # loop for first 4 images
+    guidance_loss = []
     loader_iter = iter(test_loader)
     for i in range(len(test_loader)):
         print(i, len(test_loader))
@@ -116,6 +141,17 @@ def evaluate(model, scheduler, test_loader):
         x = x.to("cuda")
         y = y.to("cuda")
         x_hat = gen_images(model, scheduler, y)
+        temp = (x_hat / 2 + 0.5).clamp(0, 1) * 255.0
+
+        # temp = x
+        # temp = (temp / 2 + 0.5).clamp(0, 1) * 255.0
+
+        y_ = A(temp)
+        y_ = Ap(y_)
+        y_ = test_loader.dataset.transform(y_ / 255.0)
+
+        ll = F.mse_loss(y_, y)
+        guidance_loss.append(ll.item())
 
         image = (x_hat / 2 + 0.5).clamp(0, 1)
         image = image.detach().cpu().permute(0, 2, 3, 1)
@@ -123,7 +159,46 @@ def evaluate(model, scheduler, test_loader):
         gt_image = (x / 2 + 0.5).clamp(0, 1)
         gt_image = gt_image.detach().cpu().permute(0, 2, 3, 1)
 
-        log_images(gt_image, image, fname='results/default/batch'+str(i)+'.png')
+        log_images(gt_image, image, fname=os.path.join(output_dir, 'batch'+str(i)+'.png'))
+
+        print('Guidance loss: ', sum(guidance_loss)/len(guidance_loss))
+
+def evaluate_ddnm(model, scheduler, test_loader, output_dir):
+    os.makedirs(output_dir, exist_ok=True)
+    model.eval()
+
+    # loop for first 4 images
+    guidance_loss = []
+    loader_iter = iter(test_loader)
+    for i in range(len(test_loader)):
+        print(i, len(test_loader))
+        batch = next(loader_iter)
+        x, y = batch
+        x = x.to("cuda")
+        y = y.to("cuda")
+        y_ = A(x).to("cuda")
+        x_hat = gen_images_ddnm(model, scheduler, y, y_)
+        temp = (x_hat / 2 + 0.5).clamp(0, 1) * 255.0
+
+        # temp = x
+        # temp = (temp / 2 + 0.5).clamp(0, 1) * 255.0
+
+        y_ = A(temp)
+        y_ = Ap(y_)
+        y_ = test_loader.dataset.transform(y_ / 255.0)
+
+        ll = F.mse_loss(y_, y)
+        guidance_loss.append(ll.item())
+
+        image = (x_hat / 2 + 0.5).clamp(0, 1)
+        image = image.detach().cpu().permute(0, 2, 3, 1)
+
+        gt_image = (x / 2 + 0.5).clamp(0, 1)
+        gt_image = gt_image.detach().cpu().permute(0, 2, 3, 1)
+
+        log_images(gt_image, image, fname=os.path.join(output_dir, 'batch'+str(i)+'.png'))
+
+        print('Guidance loss: ', sum(guidance_loss)/len(guidance_loss))
 
 gettrace = getattr(sys, 'gettrace', None)
 if gettrace is None:
@@ -158,9 +233,9 @@ def main(args):
 
     transform = transforms.Normalize(3 * [0.5], 3 * [0.5])
 
-    train_data = ButterflyDSDataset('train-00000-of-00001.parquet', transform=transform, im_size=config.image_size,
-                                    donwsample_scale=8)
-    train_loader = DataLoader(train_data, batch_size=config.train_batch_size, shuffle=True, num_workers=num_workers)
+    # train_data = ButterflyDSDataset('train-00000-of-00001.parquet', transform=transform, im_size=config.image_size,
+    #                                 donwsample_scale=8)
+    # train_loader = DataLoader(train_data, batch_size=config.train_batch_size, shuffle=True, num_workers=num_workers)
 
     test_data = ButterflyDSDataset('train-00000-of-00001.parquet', transform=transform, im_size=config.image_size,
                                    donwsample_scale=8)
@@ -173,14 +248,16 @@ def main(args):
     noise_scheduler = pipeline.scheduler
 
     if args.method == 'default':
-        evaluate(model, noise_scheduler, test_loader)
+        evaluate(model, noise_scheduler, test_loader, args.output_dir)
     elif args.method == 'ddnm':
-        evaluate_ddnm(model, noise_scheduler, test_loader)
+        evaluate_ddnm(model, noise_scheduler, test_loader, args.output_dir)
 
 # parse arguments
 parser = argparse.ArgumentParser(description='Conditional Image Super-Resolution')
-parser.add_argument('--method', type=str, required=True, choices=['default', 'ddnm'])
-parser.add_argument('--ckpt', type=str, default='wandb/run-20231119_154332-m1djegwy/files', help='Path to the pretrained model (just point to the files dir in wandb)')
+parser.add_argument('--method', type=str, default='ddnm', choices=['default', 'ddnm'], help='Method to evaluate [default, ddnm')
+parser.add_argument('--ckpt', type=str, default='wandb/run-20231119_154332-m1djegwy/files', help='Path to the pretrained model (trained without knowledge)')
+# parser.add_argument('--ckpt', type=str, default='wandb/run-20231226_152903-uqxjycl8/files', help='Path to the pretrained model (trained with knowledge)')
+parser.add_argument('--output_dir', type=str, default='results/train_npm_inference_pm', help='Path to save the results')
 
 args = parser.parse_args()
 

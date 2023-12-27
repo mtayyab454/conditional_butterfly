@@ -28,6 +28,9 @@ def get_pred_original(noise_scheduler, timesteps, noise_pred, noisy_images):
         alpha_prod_t = noise_scheduler.alphas_cumprod[t]
         beta_prod_t = 1 - alpha_prod_t
         pd = (noisy_images[i] - beta_prod_t ** (0.5) * noise_pred[i]) / alpha_prod_t ** (0.5)
+
+        pd = (pd / 2 + 0.5).clamp(0, 1)*255.0
+
         pred_original_samples.append(pd)
 
     pred_original_samples = torch.stack(pred_original_samples, dim=0)
@@ -97,8 +100,14 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, test
                     model_input = torch.cat([noisy_images, clean_y], dim=1)
                     noise_pred = model(model_input, timesteps, return_dict=False)[0]
                     pred_original_sample = get_pred_original(noise_scheduler, timesteps, noise_pred, noisy_images)
+
+                    # pred_original_sample = clean_x
+                    # pred_original_sample = (pred_original_sample / 2 + 0.5).clamp(0, 1) * 255.0
+
                     y_ = A(pred_original_sample)
                     y_ = Ap(y_)
+                    y_ = train_dataloader.dataset.transform(y_/255.0)
+
                     loss_guidance = F.mse_loss(y_, clean_y)
                     loss = loss_guidance
 
