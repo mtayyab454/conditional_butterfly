@@ -141,17 +141,16 @@ def evaluate(model, scheduler, test_loader, output_dir):
         x = x.to("cuda")
         y = y.to("cuda")
         x_hat = gen_images(model, scheduler, y)
-        temp = (x_hat / 2 + 0.5).clamp(0, 1) * 255.0
 
+        temp = (x_hat / 2 + 0.5).clamp(0, 1) * 255.0
         # temp = x
         # temp = (temp / 2 + 0.5).clamp(0, 1) * 255.0
-
         y_ = A(temp)
         y_ = Ap(y_)
         y_ = test_loader.dataset.transform(y_ / 255.0)
-
         ll = F.mse_loss(y_, y)
         guidance_loss.append(ll.item())
+        print('Guidance loss: ', sum(guidance_loss)/len(guidance_loss))
 
         image = (x_hat / 2 + 0.5).clamp(0, 1)
         image = image.detach().cpu().permute(0, 2, 3, 1)
@@ -160,8 +159,6 @@ def evaluate(model, scheduler, test_loader, output_dir):
         gt_image = gt_image.detach().cpu().permute(0, 2, 3, 1)
 
         log_images(gt_image, image, fname=os.path.join(output_dir, 'batch'+str(i)+'.png'))
-
-        print('Guidance loss: ', sum(guidance_loss)/len(guidance_loss))
 
 def evaluate_ddnm(model, scheduler, test_loader, output_dir):
     os.makedirs(output_dir, exist_ok=True)
@@ -178,17 +175,16 @@ def evaluate_ddnm(model, scheduler, test_loader, output_dir):
         y = y.to("cuda")
         y_ = A(x).to("cuda")
         x_hat = gen_images_ddnm(model, scheduler, y, y_)
-        temp = (x_hat / 2 + 0.5).clamp(0, 1) * 255.0
 
+        temp = (x_hat / 2 + 0.5).clamp(0, 1) * 255.0
         # temp = x
         # temp = (temp / 2 + 0.5).clamp(0, 1) * 255.0
-
         y_ = A(temp)
         y_ = Ap(y_)
         y_ = test_loader.dataset.transform(y_ / 255.0)
-
         ll = F.mse_loss(y_, y)
         guidance_loss.append(ll.item())
+        print('Guidance loss: ', sum(guidance_loss)/len(guidance_loss))
 
         image = (x_hat / 2 + 0.5).clamp(0, 1)
         image = image.detach().cpu().permute(0, 2, 3, 1)
@@ -197,8 +193,6 @@ def evaluate_ddnm(model, scheduler, test_loader, output_dir):
         gt_image = gt_image.detach().cpu().permute(0, 2, 3, 1)
 
         log_images(gt_image, image, fname=os.path.join(output_dir, 'batch'+str(i)+'.png'))
-
-        print('Guidance loss: ', sum(guidance_loss)/len(guidance_loss))
 
 gettrace = getattr(sys, 'gettrace', None)
 if gettrace is None:
@@ -254,10 +248,10 @@ def main(args):
 
 # parse arguments
 parser = argparse.ArgumentParser(description='Conditional Image Super-Resolution')
-parser.add_argument('--method', type=str, default='ddnm', choices=['default', 'ddnm'], help='Method to evaluate [default, ddnm')
+parser.add_argument('--method', type=str, default='default', choices=['default', 'ddnm'], help='Method to evaluate [default, ddnm')
 parser.add_argument('--ckpt', type=str, default='wandb/run-20231119_154332-m1djegwy/files', help='Path to the pretrained model (trained without knowledge)')
 # parser.add_argument('--ckpt', type=str, default='wandb/run-20231226_152903-uqxjycl8/files', help='Path to the pretrained model (trained with knowledge)')
-parser.add_argument('--output_dir', type=str, default='results/train_npm_inference_pm', help='Path to save the results')
+parser.add_argument('--output_dir', type=str, default='results/test', help='Path to save the results')
 
 args = parser.parse_args()
 
